@@ -23,36 +23,6 @@ function get-token()
 	echo $auth_token
 }
 
-function update-record()
-{
-	domain_name=$1
-	record_type=$2
-	record_name=$3
-	record_data=$4
-
-	auth_token=`get-token`
-
-	domain_id=`get-domain-id $domain_name`
-	record_id=`get-record-id $domain_name $record_type $record_name`
-
-	if [ -z $record_id ];
-	then
-		echo "Unable to find record: $record_name ($record_type)"
-		exit 1
-	fi
-
-	result=`curl -s -X PUT $api_url/$tenant_id/domains/$domain_id/records/$record_id -H 'Accept:application/json' -H 'Content-Type: application/json' -H "X-Auth-Token: $auth_token" -d "{ \"id\" : \"$record_id\",
-	\"data\" : \"$record_data\"
-	}
-	" | jq .status | sed 's/"//g'`
-	
-	if [ $result != "RUNNING" ];
-	then
-		echo "Error updating the DNS record. Status: $result"
-		exit 1
-	fi
-}
-
 function lb-list()
 {
 	auth_token=`get-token`
@@ -68,55 +38,49 @@ function lb-list()
 	echo $lbs
 }
 
-function get-domain-id()
+function get-lb-id()
 {
-	domain_name=$1
+	lb_name=$1
 
-	domains=`domain-list`
+	lbs=`lb-list`
 	
-	domain_id=`echo $domains | jq ".[] | select(.name == \"$domain_name\") | .id"`
+	lb_id=`echo $lbs | jq ".[] | select(.name == \"$lb_name\") | .id"`
 	
-	if [ -z $domain_id ];
+	if [ -z $lb_id ];
 	then
-		echo "Unable to find domain: $domain_name"
+		echo "Unable to find load balancer: $lb_name"
 		exit 1
 	fi
 	
-	echo $domain_id
+	echo $lb_id
 }
 
-function record-list()
+function get-lb()
 {
 	auth_token=`get-token`
 
-	domain_id=`get-domain-id $1`
-
-	records=`curl -s -X GET $api_url/$tenant_id/domains/$domain_id/records -H 'Accept:application/json' -H 'Content-Type: application/json'  -H "X-Auth-Token: $auth_token"`
-
-	echo $records
+	lb_name=$1
+	
+	lb_id=`get-lb-id $lb_name`
+	
+	curl -s -X GET $api_url/$tenant_id/loadbalancers/$lb_id -H "X-Auth-Token: $auth_token"
 }
 
-function get-record-id()
+function update-lb()
 {
-	domain_name=$1
-	record_type=$2
-	record_name=$3
-
 	auth_token=`get-token`
 
-	record_list=`record-list $domain_name`
+	lb_name=$1
+	attribute=$2
+	value=$3
 
-	record_id=` echo $record_list | jq ".records[] | select( .type == \"$record_type\" ) | select( .name == \"$record_name\" ) | .id " | sed 's/"//g'`
+	lb_id=`get-lb-id $lb_name`
 
-	if [ -z $record_id ];
-	then
-		echo "Unable to find record: $record_name ($record_type)"
-		exit 1
-	fi
-
-	echo $record_id
+	curl -s -X PUT $api_url/$tenant_id/loadbalancers/$lb_id -H "Content-Type: application/json" -H "X-Auth-Token: $auth_token"  -d "{
+    \"loadBalancer\": {
+        \"$attribute\": \"$value\"
+    }
+}"
 }
-
-
 
 $1 $2 $3 $4 $5
